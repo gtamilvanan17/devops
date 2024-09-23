@@ -1,0 +1,33 @@
+name: Terraform Deployment
+
+on:
+  push:
+    paths:
+      - 'Kubernetes/ec2-terraform/**'
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: View CD
+      run: pwd && ls -lla && ls -lla /home/runner/
+
+    - name: Terraform Commands
+      working-directory: Kubernetes/ec2-terraform
+      run: |
+        curl https://checkip.amazonaws.com
+        terraform init
+        terraform validate
+        terraform plan -var="access_key=${{ secrets.AWS_ACCESS_KEY_ID }}" -var="secret_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}" -out=tfplan
+        terraform apply -auto-approve tfplan

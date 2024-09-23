@@ -1,0 +1,120 @@
+name: To do app deploy - React JS
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "to-do/**"
+
+jobs:
+
+  TO_DO_APP_DOCKER_BUILD_PUSH:
+    runs-on: ubuntu-latest
+
+    env:
+      DOCKER_USERNAME   : ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKER_PASSWORD   : ${{ secrets.DOCKER_PASS_TOKEN }}
+      DOCKER_IMAGE_NAME : "todoapp-react"
+
+    defaults:
+      run:
+        working-directory: ./to-do/
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Listing Images and Containers before build
+        run: docker images && docker ps -a
+
+      - name: Login to Docker Hub
+        run: echo "${DOCKER_PASSWORD}" | docker login -u "${DOCKER_USERNAME}" --password-stdin
+
+      - name: Build Docker image
+        run: docker build -t "${DOCKER_USERNAME}"/${{ env.DOCKER_IMAGE_NAME }}:$GITHUB_RUN_NUMBER .
+
+      - name: Docker Push (Specific Version)
+        run: docker push "${DOCKER_USERNAME}"/${{ env.DOCKER_IMAGE_NAME }}:$GITHUB_RUN_NUMBER
+
+      - name: Docker Push (Latest Version)
+        run: docker tag "${DOCKER_USERNAME}"/${{ env.DOCKER_IMAGE_NAME }}:$GITHUB_RUN_NUMBER "${DOCKER_USERNAME}"/${{ env.DOCKER_IMAGE_NAME }}:latest && docker push "${DOCKER_USERNAME}"/${{ env.DOCKER_IMAGE_NAME }}:latest
+
+      - name: Listing Images and Containers after build
+        run: docker images && docker ps -a
+
+      - name: Logout from Docker Hub
+        run: docker logout
+
+  TO_DO_APP_BUILD_DEPLOY:
+    # needs: TO_DO_APP_DOCKER_BUILD_PUSH
+    runs-on: ubuntu-latest
+
+    env:
+      PAT_TOKEN     : ${{ secrets.DEVOPS_PROJECTS_GIT_PAT_TOKEN }}
+      GIT_USERNAME  : ${{ secrets.GIT_USERNAME }}
+      EXT_REPO      : "to-do"
+
+    defaults:
+      run:
+        working-directory: ./to-do/
+
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v2
+
+      - name: Setup Node.js 18
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18"
+
+      - name: Install the dependencies
+        run: npm install
+
+      - name: Build React App
+        run: npm run build
+
+      - name: Listing the datas
+        run: |
+          ls -lla $HOME/work/devops-projects-git-actions/devops-projects-git-actions/
+          ls -lla $HOME/work/devops-projects-git-actions/devops-projects-git-actions/to-do/
+          pwd
+          mkdir ../build-artifacts
+          pwd
+          cp -r build/* ../build-artifacts/
+          ls -lla $HOME/work/devops-projects-git-actions/devops-projects-git-actions/
+          ls -lla $HOME/work/devops-projects-git-actions/devops-projects-git-actions/build-artifacts/
+          ls -lla $HOME/work/devops-projects-git-actions/devops-projects-git-actions/to-do/build/
+          pwd
+
+      - name: Deploy to public repository
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          personal_token: ${{ secrets.DEVOPS_PROJECTS_GIT_PAT_TOKEN }}
+          publish_dir: ./build-artifacts/
+          external_repository: ${{ env.GIT_USERNAME }}/${{ env.EXT_REPO }}
+
+  TO_DO_APP_CONFIGURE_GITHUB_PAGES:
+      needs: [TO_DO_APP_DOCKER_BUILD_PUSH, TO_DO_APP_BUILD_DEPLOY]
+      runs-on: ubuntu-latest
+
+      env:
+        PAT_TOKEN     : ${{ secrets.DEVOPS_PROJECTS_GIT_PAT_TOKEN }}
+        GIT_USERNAME  : ${{ secrets.GIT_USERNAME }}
+        EXT_REPO      : "to-do"
+        
+      steps:
+        - name: Check if GitHub Pages is enabled
+          id: pages_check
+          run: |
+            response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token $PAT_TOKEN" https://api.github.com/repos/${{ env.GIT_USERNAME }}/${{ env.EXT_REPO }}pages)
+            echo "::set-output name=status_code::$response"
+            echo "The response code is :$response"
+
+        - name: Enable GitHub Pages if not already enabled
+          if: steps.pages_check.outputs.status_code == '404'
+          run: |
+            curl -X POST -H "Authorization: token $PAT_TOKEN" -H "Accept: application/vnd.github.switcheroo-preview+json" https://api.github.com/repos/${{ env.GIT_USERNAME }}/${{ env.EXT_REPO }}pages -d '{"source": {"branch": "gh-pages", "path": "/"}}'

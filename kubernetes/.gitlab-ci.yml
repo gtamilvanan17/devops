@@ -1,0 +1,16 @@
+# To contribute improvements to CI/CD templates, please follow the Development guide at:
+# https://docs.gitlab.com/ee/development/cicd/templates.html
+# This specific template is located at:
+# https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Getting-Started.gitlab-ci.yml
+
+stages:          # List of stages for jobs, and their order of execution  
+  - changelog
+
+create_release:
+  image: registry.gitlab.com/gitlab-ci-utils/gitlab-tag-release:latest
+  stage: changelog
+  script:
+#    - "curl -X POST --fail -F token=glptt-097743c603c0f6b71ee4dcc154161f41e28217ca -F ref=testbranch #https://gitlab.com/api/v4/projects/39362819/trigger/pipeline"
+    - node /tag-release
+  only:
+    - tags
