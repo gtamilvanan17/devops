@@ -1,0 +1,65 @@
+name: DevOps Projects - Public Pages Deployment
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "specific-dir-name/**"
+env:
+  PAT_TOKEN: ${{ secrets.DEVOPS_PROJECTS_GIT_PAT_TOKEN }}
+  GIT_USERNAME: ${{ secrets.GIT_USERNAME }}
+  GIT_EMAIL: ${{ secrets.GIT_EMAIL }}
+
+jobs:
+  cat_meme_build_deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./specific-work-dir-name/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: "18"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Vite App
+        run: npm run build
+
+      - name: Listing the datas.
+        run: |
+          ls -lla $HOME/work/devops-projects/devops-projects/cat-meme/dist/
+          mkdir ../devops/
+          cp -r dist/* ../devops/
+          ls -lla $HOME/work/devops-projects/devops-projects/
+          ls -lla $HOME/work/devops-projects/devops-projects/devops/
+
+      - name: Deploy to public repository
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          personal_token: ${{ secrets.DEVOPS_PROJECTS_GIT_PAT_TOKEN }}
+          publish_dir: ./devops
+          external_repository: gtamilvanan17/test2
+
+  cat_meme_configure_github_pages:
+      needs: cat_meme_build_deploy
+      runs-on: ubuntu-latest
+      steps:
+        - name: Check if GitHub Pages is enabled
+          id: pages_check
+          run: |
+            response=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token $PAT_TOKEN" https://api.github.com/repos/$GIT_USERNAME/cat-meme/pages)
+            echo "::set-output name=status_code::$response"
+            echo "The response code is :$response"
+
+        - name: Enable GitHub Pages if not already enabled
+          if: steps.pages_check.outputs.status_code == '404'
+          run: |
+            curl -X POST -H "Authorization: token $PAT_TOKEN" -H "Accept: application/vnd.github.switcheroo-preview+json" https://api.github.com/repos/$GIT_USERNAME/cat-meme/pages -d '{"source": {"branch": "master", "path": "/"}}'
